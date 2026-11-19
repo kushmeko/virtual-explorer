@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.ruff_cache/
+build/
+dist/
+packaging/version_info.txt
+selftest*.txt
+*.db
+*.db-wal
+*.db-shm
