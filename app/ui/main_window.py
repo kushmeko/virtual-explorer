@@ -2606,8 +2606,10 @@ class MainWindow(QMainWindow):
             self.apply_settings(dlg.changed_keys)
 
     def apply_settings(self, changed=None):
-        """Применить настройки сразу - без перезапуска."""
+        """Применить настройки сразу - без перезапуска (кроме масштаба интерфейса)."""
         s = self.settings
+        if changed and "ui_scale" in changed:
+            QTimer.singleShot(0, self.ask_restart_for_scale)
         changed = set(changed or s.data)
         if changed & {"theme", "custom_colors", "custom_themes", "font_family", "font_pt", "text_color", "density"}:
             apply_theme(QApplication.instance(), s)
@@ -2626,6 +2628,14 @@ class MainWindow(QMainWindow):
             self.page_limit = self.page_size()
         self.cover_cache.clear()
         self.refresh_all()
+
+    def ask_restart_for_scale(self):
+        answer = QMessageBox.question(
+            self, "Масштаб интерфейса",
+            f"Масштаб {self.settings['ui_scale']}% применится после перезапуска. Перезапустить сейчас?")
+        if answer == QMessageBox.Yes:
+            self.restart_requested = True   # main.py запустит программу снова после закрытия окна
+            self.close()
 
     def set_theme(self, key, menu=None):
         self.settings.set("theme", key)

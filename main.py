@@ -90,7 +90,40 @@ def run_self_test(app, window, out_path):
     QTimer.singleShot(2500, finish)
 
 
+def read_ui_scale():
+    """Масштаб интерфейса из настроек. Нужен ДО создания QApplication, поэтому читаем базу напрямую."""
+    try:
+        import json  # noqa: PLC0415
+        import sqlite3  # noqa: PLC0415
+        db_path = paths.db_path()
+        if not db_path.exists():
+            return 100
+        con = sqlite3.connect(str(db_path))
+        try:
+            row = con.execute("SELECT value FROM settings WHERE key = 'app_settings'").fetchone()
+        finally:
+            con.close()
+        value = int(json.loads(row[0]).get("ui_scale", 100)) if row else 100
+        return value if 50 <= value <= 300 else 100
+    except Exception:  # noqa: BLE001 - не смогли прочитать - обычный масштаб
+        return 100
+
+
+def restart():
+    """Запустить программу заново (после смены масштаба)."""
+    import subprocess  # noqa: PLC0415
+    args = [sys.executable] + (sys.argv[1:] if getattr(sys, "frozen", False) else sys.argv)
+    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    try:
+        subprocess.Popen(args, close_fds=True, creationflags=flags)  # noqa: S603
+    except OSError:
+        pass
+
+
 def main():
+    scale = read_ui_scale()
+    if scale != 100 and "QT_SCALE_FACTOR" not in os.environ:
+        os.environ["QT_SCALE_FACTOR"] = f"{scale / 100:.2f}"
     app = QApplication(sys.argv)
     app.setApplicationName("VirtualExplorer")
     app.setApplicationDisplayName(APP_NAME)
@@ -119,6 +152,7 @@ def main():
         safe_mode = ask_safe_mode(app)
     lock.write_text("1", encoding="utf-8")
     code = 1
+    window = None
     try:
         backup.auto_backup_if_due(db.conn)  # копия базы раз в сутки
         window = MainWindow(db, safe_mode=safe_mode)
@@ -135,6 +169,10 @@ def main():
             lock.unlink()
         except OSError:
             pass
+    if code == 0 and getattr(window, "restart_requested", False):
+        if single is not None and single.server is not None:
+            single.server.close()   # иначе новая копия решит, что программа ещё открыта
+        restart()
     sys.exit(code)
 
 

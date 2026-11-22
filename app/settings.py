@@ -12,6 +12,7 @@ DEFAULTS = {
     "custom_themes": {},        # сохранённые свои темы: {имя: цвета}
     "font_family": "",          # '' - системный, 'inter' - вшитый Inter, иначе имя шрифта
     "font_pt": 0,               # размер текста в пунктах, 0 - как в системе
+    "ui_scale": 100,            # масштаб всего интерфейса, % (применяется при запуске)
     "text_color": "",           # свой цвет текста ('' - из темы)
     "density": "normal",        # compact | normal | comfortable - отступы в списках
     "language": "ru",           # пока только русский
@@ -38,6 +39,7 @@ DEFAULTS = {
     "settings_version": 3,
 }
 
+UI_SCALES = [80, 90, 100, 110, 125, 150, 175]
 DENSITY = {"compact": "Компактно", "normal": "Обычно", "comfortable": "Просторно"}
 LANGUAGES = {"ru": "Русский"}
 KEY = "app_settings"

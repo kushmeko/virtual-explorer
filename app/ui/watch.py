@@ -146,6 +146,11 @@ class _FuncJob(QRunnable):
 
     def run(self):
         try:
+            from PySide6.QtCore import QThread  # noqa: PLC0415
+            QThread.currentThread().setPriority(QThread.LowPriority)   # окно важнее фона
+        except Exception:  # noqa: BLE001
+            pass
+        try:
             result = self.func(*self.args)
         except Exception as exc:  # noqa: BLE001 - результатом станет ошибка, окно не падает
             result = exc

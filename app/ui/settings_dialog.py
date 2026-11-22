@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.settings import DEFAULTS, DENSITY, LANGUAGES
+from app.settings import DEFAULTS, DENSITY, LANGUAGES, UI_SCALES
 from app.ui import theme as th
 from app.version import GITHUB_REPO, VERSION
 
@@ -224,6 +224,9 @@ class SettingsDialog(QDialog):
         self.density = _combo(DENSITY.items(), w["density"])
         self.density.currentIndexChanged.connect(lambda: self.set_work("density", self.density.currentData()))
         card.row("Плотность списков", "Сколько места между строками в боковой панели и списке.", self.density)
+        self.ui_scale = _combo([(v, f"{v}%") for v in UI_SCALES], int(w.get("ui_scale", 100)))
+        card.row("Масштаб интерфейса", "Увеличивает или уменьшает всё сразу: текст, кнопки, значки. "
+                 "Применится после перезапуска программы.", self.ui_scale)
 
         card = Card(lay, "Цвета своей темы")
         card.widget(_muted("Нажми на цвет, чтобы поменять. Если выбрана готовая тема, её цвета станут "
@@ -589,6 +592,7 @@ class SettingsDialog(QDialog):
             "language": self.language.currentData(), "cover_badges": self.badges.value(),
             "cover_stars": self.stars.isChecked(), "cover_strip": self.strip.isChecked(),
             "show_details": self.details.isChecked(), "page_size": self.page_size.currentData(),
+            "ui_scale": self.ui_scale.currentData(),
             "start_view": self.start_view.currentData(), "watch_folders": self.watch.isChecked(),
             "auto_duplicates": self.dups.isChecked(), "auto_colors": self.colors.isChecked(),
             "confirm_remove": self.confirm.isChecked(), "big_folder_files": self.big.value(),

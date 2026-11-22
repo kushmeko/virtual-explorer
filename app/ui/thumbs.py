@@ -5,6 +5,8 @@
 * поверх обложки: ★ у избранного, цветная полоска тегов и значки тегов (до 3 + «…»)
 """
 import hashlib
+import os
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRect, QRunnable, QSize, Qt, QThreadPool, Signal
@@ -214,6 +216,15 @@ class _Signals(QObject):
     done = Signal(int, QImage)
 
 
+def _low_priority():
+    """Фоновые потоки - с пониженным приоритетом, чтобы окно не тормозило."""
+    try:
+        from PySide6.QtCore import QThread  # noqa: PLC0415
+        QThread.currentThread().setPriority(QThread.LowPriority)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 class _Job(QRunnable):
     def __init__(self, file_id, path, signals):
         super().__init__()
@@ -222,6 +233,7 @@ class _Job(QRunnable):
         self.signals = signals
 
     def run(self):
+        _low_priority()
         img = make_cover_image(self.path)
         if img is not None:
             self.signals.done.emit(self.file_id, img)
@@ -235,7 +247,8 @@ class ThumbnailLoader(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.pool = QThreadPool(self)
-        self.pool.setMaxThreadCount(4)
+        # 2 потока, а не 4: на слабых ноутбуках 4 потока превью отнимали процессор у окна
+        self.pool.setMaxThreadCount(max(1, min(2, (os.cpu_count() or 2) - 1)))
         self._signals = _Signals()
         self._signals.done.connect(self.loaded)
         self._requested = set()
@@ -266,12 +279,16 @@ def image_colors(path):
     img = reader.read()
     if img.isNull():
         return ""
-    img = img.convertToFormat(QImage.Format_ARGB32)
+    # v1.6: раньше каждый пиксель читался отдельным вызовом pixelColor (1024 вызова на картинку,
+    # сотни картинок подряд) - фоновый поток не отпускал Python, и окно заметно лагало.
+    # Теперь читаем все байты разом: в памяти RGBA8888 - это r, g, b, a подряд.
+    img = img.convertToFormat(QImage.Format_RGBA8888)
+    w, h, line = img.width(), img.height(), img.bytesPerLine()
+    data = bytes(img.constBits())[:line * h]
     px = []
-    for y in range(img.height()):
-        for x in range(img.width()):
-            c = img.pixelColor(x, y)
-            px.append((c.red(), c.green(), c.blue(), c.alpha()))
+    for y in range(h):
+        row = data[y * line: y * line + w * 4]
+        px.extend(zip(row[0::4], row[1::4], row[2::4], row[3::4], strict=True))
     return dominant(px)
 
 
@@ -283,4 +300,5 @@ def compute_colors(rows):
             result[fid] = image_colors(path)
         except Exception:  # noqa: BLE001 - битая картинка не должна останавливать остальные
             result[fid] = ""
+        time.sleep(0.003)   # короткая пауза: окно успевает отрисоваться, пока фон считает цвета
     return result
