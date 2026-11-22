@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QCompleter,
     QDialog,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
@@ -305,7 +306,7 @@ class MainWindow(QMainWindow):
             more.addSection(title)
             for text, slot in items:
                 more.addAction(text).triggered.connect(slot)
-        more_btn = self.more_btn = QToolButton()
+        more_btn = self.menu_btn = QToolButton()   # не more_btn: так называется «показать ещё» внизу
         more_btn.setText("☰ Ещё")
         more_btn.setMenu(more)
         more_btn.setPopupMode(QToolButton.InstantPopup)
@@ -502,13 +503,19 @@ class MainWindow(QMainWindow):
         self.empty_text.setWordWrap(True)
         self.empty_text.setStyleSheet("color: #868e96;")
         self.empty_btn = QPushButton("")
-        self.empty_btn.setMinimumHeight(36)
+        self.empty_btn.setObjectName("primary")
+        self.empty_btn.setMinimumHeight(40)
         self.empty_btn.clicked.connect(self.on_empty_action)
+        self.empty_btn2 = QPushButton("🎓 Показать, где что (1 минута)")
+        self.empty_btn2.setMinimumHeight(40)
+        self.empty_btn2.clicked.connect(self.start_tour)
+        self.empty_btn2.setVisible(False)
         ep.addWidget(self.empty_title)
         ep.addWidget(self.empty_text)
         row = QHBoxLayout()
         row.addStretch(1)
         row.addWidget(self.empty_btn)
+        row.addWidget(self.empty_btn2)
         row.addStretch(1)
         ep.addLayout(row)
         ep.addStretch(2)
@@ -525,6 +532,23 @@ class MainWindow(QMainWindow):
         center_layout.addWidget(self.search_hint)
         center_layout.addLayout(tag_row)
         center_layout.addWidget(self.chips_widget)
+        # v1.7: подсказка для новичков - пока не поставлен ни один свой тег
+        self.hint_bar = QFrame()
+        self.hint_bar.setObjectName("card")
+        hb = QHBoxLayout(self.hint_bar)
+        hb.setContentsMargins(12, 6, 6, 6)
+        self.hint_label = QLabel(
+            "💡 <b>Первый тег:</b> выдели файл (или несколько) и нажми <b>Ctrl+T</b> - "
+            "или впиши тег в панели справа. Потом пиши <b>#тег</b> в поиске, чтобы найти файлы.")
+        self.hint_label.setWordWrap(True)
+        self.hint_label.setTextFormat(Qt.RichText)
+        hint_close = QPushButton("Понятно ✕")
+        hint_close.setToolTip("Больше не показывать эту подсказку")
+        hint_close.clicked.connect(self.dismiss_tag_hint)
+        hb.addWidget(self.hint_label, 1)
+        hb.addWidget(hint_close)
+        self.hint_bar.setVisible(False)
+        center_layout.addWidget(self.hint_bar)
         center_layout.addWidget(self.views, 1)
         self.more_btn = QPushButton("")
         self.more_btn.setVisible(False)
@@ -1139,6 +1163,7 @@ class MainWindow(QMainWindow):
         self.refresh_file_panel()
         self.update_search_hint()
         self.update_sub_indicator()
+        self.update_tag_hint()
         self.update_empty_state(total)
         self.statusBar().showMessage(f"Файлов: {total}")
 
@@ -1868,12 +1893,18 @@ class MainWindow(QMainWindow):
         if n_files:
             self.views.setCurrentIndex(0 if self.mode == "grid" else 1)
             return
-        if self.db.count_files() == 0:
-            title, text, btn, action = (
-                "Библиотека пока пустая",
-                "Добавь папку - файлы останутся на своих местах, программа просто их запомнит\n"
-                "и будет следить за изменениями. Потом раскладывай их тегами и коллекциями.",
-                "📂 Добавить папку", self.add_folder)
+        welcome = self.db.count_files() == 0
+        self.empty_btn2.setVisible(welcome)
+        if welcome:
+            # v1.7: первый экран - по шагам, что делать (раньше новичкам было непонятно, с чего начать)
+            title, btn, action = "Добро пожаловать! Начни в три шага", "📂 Добавить папку", self.add_folder
+            text = ("<table align='center' cellpadding='6'>"
+                    "<tr><td style='font-size:18px'>1</td><td><b>Добавь папку</b> с файлами. Файлы останутся "
+                    "на своих местах - программа их только запомнит.</td></tr>"
+                    "<tr><td style='font-size:18px'>2</td><td><b>Поставь теги:</b> выдели файлы и нажми Ctrl+T "
+                    "(например «Учёба», «Важное»).</td></tr>"
+                    "<tr><td style='font-size:18px'>3</td><td><b>Находи за секунды:</b> пиши <b>#тег</b> "
+                    "в поиске или кликай по тегам над файлами.</td></tr></table>")
         elif self.active_sub_filter():
             title, text = SUB_FILTER_EMPTY[self.active_sub_filter()]
             btn, action = "✕ Показать все файлы", lambda: self.set_sub_filter("")
@@ -1904,6 +1935,15 @@ class MainWindow(QMainWindow):
         self.empty_btn.setVisible(bool(btn))
         self.empty_action = action
         self.views.setCurrentIndex(2)
+
+    def update_tag_hint(self):
+        show = (not self.settings["hint_tags_done"] and self.db.count_files() > 0
+                and not self.db.has_user_tags())
+        self.hint_bar.setVisible(show)
+
+    def dismiss_tag_hint(self):
+        self.settings.set("hint_tags_done", True)
+        self.hint_bar.setVisible(False)
 
     def on_empty_action(self):
         if self.empty_action:
@@ -2678,7 +2718,7 @@ class MainWindow(QMainWindow):
              "и коллекции выделенного файла. Спрятать панель - кнопка ▤ или Ctrl+P."),
             (lambda: tb.widgetForAction(self.undo_action), "Отмена", "<b>↶ ↷</b> - отменить и повторить любое "
              "действие (Ctrl+Z / Ctrl+Y). Ничего не потеряется."),
-            (lambda: self.more_btn, "☰ Ещё", "Правила авто-тегов, дубликаты, статистика, резервные копии, "
+            (lambda: self.menu_btn, "☰ Ещё", "Правила авто-тегов, дубликаты, статистика, резервные копии, "
              "экспорт и импорт."),
             (lambda: tb.widgetForAction(self.settings_action), "⚙ Настройки", "Темы и свои цвета, шрифт, "
              "горячие клавиши. Там же можно снова пройти это обучение. Удачи! 🎉"),

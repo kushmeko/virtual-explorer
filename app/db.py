@@ -570,6 +570,12 @@ class Database:
         self.conn.commit()
 
     # ---------- настройки и история поиска ----------
+    def has_user_tags(self):
+        """Есть ли хоть у одного файла свой (не авто) тег."""
+        return self.conn.execute(
+            "SELECT 1 FROM file_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.is_auto = 0 LIMIT 1"
+        ).fetchone() is not None
+
     def get_setting(self, key, default=None):
         row = self.conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
         return json.loads(row["value"]) if row else default
