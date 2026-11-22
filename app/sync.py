@@ -39,6 +39,7 @@ class Report:
     restored: int = 0    # снова на месте (вернули флешку и т.п.)
     added: int = 0       # новые файлы в папках библиотеки
     still_missing: int = 0
+    moved_items: list = field(default_factory=list)   # [(старое имя, новое имя)] - для уведомления
 
     def text(self):
         parts = []
@@ -162,6 +163,8 @@ def apply(db, snap):
             if len(ids) == 1:  # однозначно - иначе не гадаем, добавим как новый
                 best = ids.pop()
         if best is not None:
+            old = next(c["path"] for c in cands if c["id"] == best)
+            rep.moved_items.append((os.path.basename(old), os.path.basename(path)))
             db.relink(best, path, info)
             taken.add(best)
             gone.discard(best)

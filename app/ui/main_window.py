@@ -549,6 +549,25 @@ class MainWindow(QMainWindow):
         hb.addWidget(hint_close)
         self.hint_bar.setVisible(False)
         center_layout.addWidget(self.hint_bar)
+        # v1.8: уведомление «файл переименован или перемещён - теги сохранены»
+        self.notice_bar = QFrame()
+        self.notice_bar.setObjectName("card")
+        nb = QHBoxLayout(self.notice_bar)
+        nb.setContentsMargins(12, 6, 6, 6)
+        self.notice_label = QLabel("")
+        self.notice_label.setWordWrap(True)
+        self.notice_label.setTextFormat(Qt.RichText)
+        notice_close = QPushButton("✕")
+        notice_close.setFixedWidth(32)
+        notice_close.setToolTip("Скрыть")
+        notice_close.clicked.connect(lambda: self.notice_bar.setVisible(False))
+        nb.addWidget(self.notice_label, 1)
+        nb.addWidget(notice_close)
+        self.notice_bar.setVisible(False)
+        self.notice_timer = QTimer(self)
+        self.notice_timer.setSingleShot(True)
+        self.notice_timer.timeout.connect(lambda: self.notice_bar.setVisible(False))
+        center_layout.addWidget(self.notice_bar)
         center_layout.addWidget(self.views, 1)
         self.more_btn = QPushButton("")
         self.more_btn.setVisible(False)
@@ -1691,6 +1710,8 @@ class MainWindow(QMainWindow):
     def on_files_checked(self, report, manual):
         if report.changed:
             self.refresh_all()
+        if report.moved:
+            self.show_moved_notice(report.moved_items or [], report.moved)
         if report.changed or manual:
             self.statusBar().showMessage(report.text(), 8000)
         # после проверки - тихо досчитать отпечатки дубликатов и цвета картинок (только новое)
@@ -1935,6 +1956,21 @@ class MainWindow(QMainWindow):
         self.empty_btn.setVisible(bool(btn))
         self.empty_action = action
         self.views.setCurrentIndex(2)
+
+    def show_moved_notice(self, items, count):
+        """Главное отличие программы - показываем его явно: файл нашёлся, теги на месте."""
+        from html import escape  # noqa: PLC0415
+        if count == 1 and items:
+            old, new = items[0]
+            what = (f"Файл <b>{escape(old)}</b> переименован в <b>{escape(new)}</b>" if old != new
+                    else f"Файл <b>{escape(new)}</b> перемещён в другую папку")
+        else:
+            names = ", ".join(escape(n) for _o, n in items[:3]) + ("…" if count > 3 else "")
+            what = f"Переименовано или перемещено файлов: <b>{count}</b> ({names})"
+        self.notice_label.setText(f"🔄 {what} - программа нашла его сама. "
+                                  "<b>Теги, коллекции и оценки сохранены.</b>")
+        self.notice_bar.setVisible(True)
+        self.notice_timer.start(20000)
 
     def update_tag_hint(self):
         show = (not self.settings["hint_tags_done"] and self.db.count_files() > 0
